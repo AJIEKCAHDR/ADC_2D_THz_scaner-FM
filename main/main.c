@@ -86,9 +86,12 @@ int reading_adc1_smooth_max_period(void) {
 static int handler_command(char *string) {
 	if(!strncmp(string,"sm_max",6)) {		//which driver? adc?
 		return reading_adc1_smooth_max_period();
-	} else {
-		ESP_LOGE("handler_cmd", "no such driver: %s", string); return -2;
-	}	//error= -2 (no such driver)
+	} else if(!strncmp(string,"reboot",6)) {	//rebooting esp32?
+			ESP_LOGI("handler_cmd", "Rebooting ESP32...");
+			esp_restart();
+		} else {
+			ESP_LOGE("handler_cmd", "no such driver: %s", string); return -2;
+		}	//error= -2 (no such driver)
 	return 1;				//Command completed
 }
 
@@ -159,7 +162,7 @@ static void adc1_initialize(void *arg) {
 
 void app_main(void)
 {
-	printf("ADC_2D_THz_scaner+FM start v_4...\n");
+	printf("ADC_2D_THz_scaner+FM start v_4.1 ...\n");
 	xTaskCreate(uart_select_task, "uart_select_task", 4096, NULL, 6, NULL);		//start task uart communication
 	xTaskCreate(adc1_initialize, "adc1_initialize", 4096, NULL, 7, NULL);	//task for initialize adc1
 	for(int n = 0; n < ARRAY_SIZE; n++) { signals[0][n] = n; signals[1][n] = 0; }	//clear data in array signal

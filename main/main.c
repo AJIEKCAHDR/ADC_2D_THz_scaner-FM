@@ -38,6 +38,8 @@ int signals[2][ARRAY_SIZE];	//Array for signal
 
 static const char* UART = "uart", * PIN = "gpio", * ADC = "adc";
 
+EventGroupHandle_t adc_event_group;
+static const int ADC_START_BIT = BIT0;
 static const adc_channel_t channel = ADC_CHANNEL_6;     //GPIO34 if ADC1
 static esp_adc_cal_characteristics_t *adc_chars;
 
@@ -201,23 +203,40 @@ void getApprox(int *a, int *b, int n, int step) {
   *b = (sumy - *a*sumx) / step;
   return;
 }
-int reading_adc1_smooth_max_period(void) {
+static void reading_adc1_smooth_max_start(void *arg) {
+	xEventGroupSetBits(adc_event_group, ADC_START_BIT);				//set flag START adc
+	ESP_LOGI(ADC,"Success ADC start!");
 	int a, b, max_sign = 0;
-	getData();
-	for (int i = 0, step = WINDOW_APROX; i < ARRAY_SIZE; i+=step) {
-		if(ARRAY_SIZE-i < WINDOW_APROX) step = ARRAY_SIZE-i;
-		getApprox(&a, &b, i, step);
-		for (int n = i; n < i+step; n++) { signals[1][n] = a*n + b; }
+	while(1) {
+		if (-12 == getData()) { xEventGroupClearBits(adc_event_group, ADC_START_BIT); vTaskDelete(NULL); }		//clear flag START adc
+		for (int i = 0, step = WINDOW_APROX; i < ARRAY_SIZE; i+=step) {
+			if(ARRAY_SIZE-i < WINDOW_APROX) step = ARRAY_SIZE-i;
+			getApprox(&a, &b, i, step);
+			for (int n = i; n < i+step; n++) { signals[1][n] = a*n + b; }
+		}
+		// for (int i = 0; i<ARRAY_SIZE; i++) ESP_LOGI(ADC,"%d : %d", signals[0][i], signals[1][i]);	// Testing Aproximation
+		for (int n = 0; n < ARRAY_SIZE; n++) { if(signals[1][n] > max_sign) { max_sign =  signals[1][n]; } }
+		ESP_LOGI("Max","%d", max_sign);
+		if((ADC_START_BIT & xEventGroupWaitBits(adc_event_group, ADC_START_BIT, false, false, (TickType_t) 0)) == 0) { break; }
+		vTaskDelay(10 / portTICK_PERIOD_MS);
 	}
-	// for (int i = 0; i<ARRAY_SIZE; i++) ESP_LOGI(ADC,"%d : %d", signals[0][i], signals[1][i]);	// Testing Aproximation
-	for (int n = 0; n < ARRAY_SIZE; n++) { if(signals[1][n] > max_sign) { max_sign =  signals[1][n]; } }
-	ESP_LOGI(ADC,"Max: %d", max_sign);
-	return 1;
+	xEventGroupClearBits(adc_event_group, ADC_START_BIT);		//clear flag START adc
+	vTaskDelete(NULL);
 }
 int command_adc(char *str) {
 	shift_string(str, 4);		//string left shift by 4 symbol
-	if(!strncmp(str,"sm_max",6))	{	//reading mode? maximum level line smooth signal in periodic reading adc
-		return reading_adc1_smooth_max_period();
+	if(!strncmp(str,"sm_max/",7))	{	//reading mode? maximum level line smooth signal in periodic reading adc
+		shift_string(str, 7);		//string left shift by 7 symbol
+		if(!strncmp(str,"stop",4))	{	//stop adc proccess
+			if((ADC_START_BIT & xEventGroupWaitBits(adc_event_group, ADC_START_BIT, false, false, (TickType_t) 0)) != 0) {
+				xEventGroupClearBits(adc_event_group, ADC_START_BIT);		//clear flag START adc								//Stop of the ADC series process
+				ESP_LOGI(ADC,"Success ADC stop!");
+			} else { ESP_LOGE(ADC, "Fail STOP. adc no action!"); return -7; }	//if no set flag START adc
+		} else if(!strncmp(str,"start",5))	{	//start adc proccess
+			if((ADC_START_BIT & xEventGroupWaitBits(adc_event_group, ADC_START_BIT, false, false, (TickType_t) 0)) == 0) {
+				xTaskCreatePinnedToCore(reading_adc1_smooth_max_start, "adc1_smooth_max_start", 8192, NULL, 5, NULL, 1);		//Start of the ADC series process
+			} else { ESP_LOGE(ADC, "Fail START. adc action!"); return -7; }	//if no clear flag START adc
+		} else {ESP_LOGE(ADC, "no such mode sm_max: %s", str); return -4;} //error= -4 (no such mode sm_max:)
 	} else if(!strncmp(str,"max:",4))	{	//reading mode? maximum level signal in periodic reading adc
 		return reading_adc1_max_period(str);
 	} else if(!strncmp(str,"period:",7))	{	//reading mode? periodic reading adc
@@ -287,7 +306,6 @@ static void uart_select_task(void *arg) {
                     	//ESP_LOGW(UART, "%s", buf);
                     	if((error_h = handler_command(buf)) == 1) { /*ESP_LOGI(UART, "OK");*/}	//Call handler commands UART, Result call handler commands UART
                     	else { if (error_h == 0) { ESP_LOGI(UART, "No command UART"); } else { denied(BUZZ_PIN); ESP_LOGE(UART, "Command failed: error %d", error_h); } }
-                    	for(int n = 0; n < ARRAY_SIZE; n++) { signals[1][n] = 0; }	//clear data in array signal
                     }
 					else { ESP_LOGE(UART, "UART read error"); break; }      //Failed reading received data
 				} else { ESP_LOGE(UART, "No FD has been set in select()"); break; }
@@ -312,12 +330,14 @@ static void adc1_initialize(void *arg) {
     else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) { ESP_LOGI(ADC,"Characterized using eFuse Vref"); }
     else { ESP_LOGI(ADC,"Characterized using Default Vref"); }
     ESP_LOGI(ADC, "Initialization DONE!");
+    xEventGroupClearBits(adc_event_group, ADC_START_BIT);		//clear flag ADC start
     vTaskDelete(NULL);
 }
 
 void app_main(void)
 {
 	printf("ADC_2D_THz_scaner+FM start...\n");
+	adc_event_group = xEventGroupCreate();	//create event group for flags allow mcpwm to go
 	xTaskCreate(uart_select_task, "uart_select_task", 4096, NULL, 6, NULL);		//start task uart communication
 	xTaskCreate(adc1_initialize, "adc1_initialize", 4096, NULL, 7, NULL);	//task for initialize adc1
 	for(int n = 0; n < ARRAY_SIZE; n++) { signals[0][n] = n; signals[1][n] = 0; }	//clear data in array signal

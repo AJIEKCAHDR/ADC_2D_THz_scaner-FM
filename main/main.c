@@ -1,7 +1,7 @@
 /*
  * main.c (ADC_2D_THz_scaner+FM project)
  *
- *  Created on: 15 July. 2019.
+ *  Created on: 15 July. 2021.
  *      Author: aleksanderberdyugin@gmail.com
  */
 
@@ -25,9 +25,9 @@
 #include "esp_types.h"
 
 #define BUFFER_SIZE	    64	//Set max buffer reading data for UART
-#define BUZZ_PIN		 		 4  //pin for buzzer
-#define WINDOW_APROX		30  //Set the window for approximating the signal values
-#define ARRAY_SIZE		1000
+#define BUZZ_PIN		 4  //pin for buzzer
+#define WINDOW_APROX	30  //Set the window for approximating the signal values
+#define ARRAY_SIZE	  1000
 
 int signals[2][ARRAY_SIZE];	//Array for signal
 

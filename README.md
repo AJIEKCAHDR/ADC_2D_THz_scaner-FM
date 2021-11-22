@@ -1,32 +1,30 @@
-# MCPWM basic config Example
+# ADC_2D_THz_scaner+FM project
 
-This example will show you how to use each submodule of MCPWM unit
+Этот проект предназанчен для работы в составе программного комплекса "Программа управления системой регистрации двумерного распределения фазового сдвига".
+
+Программа предназначена для оцифровки сигнала (несколько периодов, 24 Гц) с детектора спектрометра СТД-21, его аппроксимации и поиска максимального значения (амплитуда).
+
+В качестве исполнительного устройства используется ESP32, который подключен через последовательный порт к ПК, на котором запущена программа в среде LabVIEW "2D__Scaner+FM_v.8.1.2.1_adc-esp32"
+
+Построена на операционке FreeRTOS. Запускается поток для считывания команд из UART. При получении команды: "sm_max" приходит ответ: "0 - 4095" (12-битовое значение с АЦП) "0 - 3.3" Вольта
  
-The example can't be used without modifying the code first
- 
-Edit the macros at the top of mcpwm_example_basic_config.c to enable/disable the submodules which are used in the example
+Все права защищены. Ссылка на реферат свидетельства программы для ЭВМ в Роспатент: https://www1.fips.ru/fips_servl/fips_servlet?DB=EVM&DocNumber=2021666106&TypeFile=html
 
 
-## Step 1: Pin assignment
-* The gpio init function initializes:
-    * six MCPWM output pins
-    * three MCPWM fault input pins
-    * three MCPWM sync input pins
-    * three MCPWM capture input pins 
+## Step 1: Pin assignment:
+    * АЦП (ADC1)     = GPIO34 
+    * Пищалка (BUZZ) = GPIO4
 
 	
 ## Step 2: Connection
-* Six MCPWM output pins to motor driver input signals
-* Fault, sync, capture signals can be connected to respective signals
+* Подключение ESP32 к ПК через USB кабель
 
 
-## Step 3: Initialize MCPWM 
-* You need to set the frequency and duty cycle of each three MCPWM timer along with other parameters mentioned
-* You need to set the MCPWM channel you want to use, with these timers
+## Step 3: Initialize UART 
+* baud_rate = 115200
+* data_bits = UART_DATA_8_BITS
 
 
-## Step 4: Testing
-* The deadtime module, set deadtime type and with value as time*100ns
-* The sync module, synchonizes all the timer pulses
-* The fault module when enabled takes action on MCPWM signals when fault occurs
-* The capture module captures input signal(digital i.e. hall sensor value, etc), timing between two rising/falling edge
+## Step 4: Initialize ADC1 
+* resolution  = ADC_WIDTH_BIT_12
+* attenuation = ADC_ATTEN_DB_11
